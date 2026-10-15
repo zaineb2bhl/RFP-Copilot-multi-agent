@@ -1,0 +1,29 @@
+{
+  "description": "Retrieval gold for the municipal-website knowledge base in data/knowledge_base (fictional company Northbridge Civic Web). Each query is a typical requirement of a city website RFP; relevant_sources are the files that contain evidence to answer it (labelled by the knowledge-base authors). Relevance is judged per file, not per chunk.",
+  "queries": [
+    {"id": "Q01", "query": "The website must conform to WCAG 2.1 Level AA and comply with the ADA.", "relevant_sources": ["accessibility.md", "cv-accessibility-specialist.md", "proj-larkspur-falls.md"]},
+    {"id": "Q02", "query": "Content editors must be able to schedule content to publish and expire automatically.", "relevant_sources": ["cms-content-publishing.md", "cms-modules.md"]},
+    {"id": "Q03", "query": "Staff should be able to add, edit and move content directly on the front end of the site.", "relevant_sources": ["cms-content-publishing.md", "proj-port-alder.md"]},
+    {"id": "Q04", "query": "Hidden or deleted pages must not keep appearing in Google search results.", "relevant_sources": ["cms-content-publishing.md"]},
+    {"id": "Q05", "query": "Provide user-friendly vanity URLs that staff can create and organize.", "relevant_sources": ["cms-content-publishing.md"]},
+    {"id": "Q06", "query": "A single calendar where all departments post events and residents can filter by category.", "relevant_sources": ["cms-modules.md", "proj-millbrook.md"]},
+    {"id": "Q07", "query": "A section to post bids, RFPs and RFQs with addenda and notifications to vendors.", "relevant_sources": ["cms-modules.md", "proj-cedar-county.md"]},
+    {"id": "Q08", "query": "The website must integrate with our parks and recreation registration software.", "relevant_sources": ["integrations.md", "proj-millbrook.md", "cv-lead-developer.md"]},
+    {"id": "Q09", "query": "Residents must be able to reach online utility bill payments from the website.", "relevant_sources": ["integrations.md", "proj-millbrook.md"]},
+    {"id": "Q10", "query": "Hosting must guarantee 99.9% uptime with SSL certificates and daily backups.", "relevant_sources": ["hosting-security.md"]},
+    {"id": "Q11", "query": "Describe your disaster recovery plan and recovery time objective.", "relevant_sources": ["hosting-security.md"]},
+    {"id": "Q12", "query": "Migrate existing content and documents while preserving search engine rankings.", "relevant_sources": ["content-migration-seo.md", "proj-larkspur-falls.md", "proj-port-alder.md"]},
+    {"id": "Q13", "query": "Provide training for city staff on website administration and content updates.", "relevant_sources": ["training-documentation.md", "proj-larkspur-falls.md", "proj-port-alder.md"]},
+    {"id": "Q14", "query": "Written documentation and user guides for content editors.", "relevant_sources": ["training-documentation.md"]},
+    {"id": "Q15", "query": "Ongoing technical support with guaranteed response times for critical issues.", "relevant_sources": ["support-maintenance-sla.md"]},
+    {"id": "Q16", "query": "Staff must log in with single sign-on through our Microsoft Active Directory.", "relevant_sources": ["cms-platform-overview.md", "proj-larkspur-falls.md", "cv-lead-developer.md"]},
+    {"id": "Q17", "query": "Role-based permissions and approval workflows so departments manage their own pages.", "relevant_sources": ["cms-platform-overview.md", "proj-cedar-county.md"]},
+    {"id": "Q18", "query": "Provide at least three references from similar municipal website projects.", "relevant_sources": ["client-references.md", "company-profile.md"]},
+    {"id": "Q19", "query": "Provide a proposed project timeline and describe your project management approach.", "relevant_sources": ["project-approach-timeline.md", "cv-project-manager.md"]},
+    {"id": "Q20", "query": "Describe your design process, including user research and homepage design concepts.", "relevant_sources": ["design-ux-process.md", "cv-design-lead.md"]},
+    {"id": "Q21", "query": "The vendor must carry general liability and cyber liability insurance.", "relevant_sources": ["company-profile.md"]},
+    {"id": "Q22", "query": "Provide website analytics and regular usage reports.", "relevant_sources": ["analytics-reporting.md"]},
+    {"id": "Q23", "query": "Send emergency alerts to residents by text message and show an alert banner on the site.", "relevant_sources": ["cms-modules.md", "proj-millbrook.md"]},
+    {"id": "Q24", "query": "The website must offer translation into multiple languages.", "relevant_sources": ["cms-modules.md"]}
+  ]
+}

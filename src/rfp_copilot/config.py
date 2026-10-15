@@ -11,7 +11,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LLMProvider = Literal["gemini", "ollama", "openai", "mock"]
 EmbeddingProvider = Literal["ollama", "gemini", "openai", "mock"]
-LLMRole = Literal["writer", "reviewer"]
+LLMRole = Literal["writer", "reviewer", "judge"]
 StructuredMode = Literal["auto", "json_schema", "json_object", "prompt"]
 
 PROVIDER_BASE_URLS: dict[str, str] = {
@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     reviewer_llm_api_key: SecretStr | None = None
     reviewer_llm_model: str | None = None
 
+    # Optional evaluation judge (eval/ scripts only; falls back to the reviewer). Keeping it
+    # separate lets evaluations use a strong, slow, low-quota model without slowing the app.
+    eval_judge_provider: LLMProvider | None = None
+    eval_judge_model: str | None = None
+    eval_judge_api_key: SecretStr | None = None
+
     # Where the Ollama provider lives (both LLM and embeddings). In Docker use
     # http://host.docker.internal:11434/v1 so the container reaches Ollama on the host.
     ollama_base_url: str = PROVIDER_BASE_URLS["ollama"]
@@ -93,9 +99,16 @@ class Settings(BaseSettings):
     chroma_collection: str = "knowledge_base"
     chunk_size: int = 800  # characters
     chunk_overlap: int = 120  # characters
-    retrieval_k: int = 6  # passages given to the writer per response section
+    retrieval_k: int = 6  # passage budget per section, spread over its requirements
+    retrieval_min_per_requirement: int = 2  # every requirement gets at least this many
+    retrieval_max_per_section: int = 10
     retrieval_candidates: int = 20  # per retriever, before RRF fusion
     rrf_k: int = 60
+    # Relevance floor (cosine similarity, embedding-model specific; calibrate with
+    # eval/calibrate_relevance.py). 0.67 separates on- and off-domain queries for nomic-embed-text.
+    min_relevance: float = 0.67
+    rerank_enabled: bool = False  # listwise LLM reranking of fused candidates (1 call/query)
+    rerank_candidates: int = 12
 
     # Pipeline
     extraction_batch_chars: int = 6000  # RFP text per extraction call (fits a 4k-token context)
@@ -163,7 +176,7 @@ def resolve_llm_profile(settings: Settings, role: LLMRole = "writer") -> LLMProf
     model = settings.llm_model
     key_candidates: list[str | None] = [_secret(settings.llm_api_key)]
 
-    if role == "reviewer":
+    if role in ("reviewer", "judge"):
         reviewer_provider = settings.reviewer_llm_provider or provider
         if reviewer_provider != provider:
             # Different provider: do not inherit URL, model or key from the writer.
@@ -172,6 +185,15 @@ def resolve_llm_profile(settings: Settings, role: LLMRole = "writer") -> LLMProf
         base_url = settings.reviewer_llm_base_url or base_url
         model = settings.reviewer_llm_model or model
         key_candidates = [_secret(settings.reviewer_llm_api_key), *key_candidates]
+
+    if role == "judge":
+        # Evaluation judge: inherits the reviewer, overridable without touching the pipeline.
+        judge_provider = settings.eval_judge_provider or provider
+        if judge_provider != provider:
+            base_url, model, key_candidates = None, None, []
+        provider = judge_provider
+        model = settings.eval_judge_model or model
+        key_candidates = [_secret(settings.eval_judge_api_key), *key_candidates]
 
     return LLMProfile(
         provider=provider,

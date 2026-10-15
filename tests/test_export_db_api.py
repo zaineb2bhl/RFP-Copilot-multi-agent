@@ -9,11 +9,18 @@ from docx import Document
 from fastapi.testclient import TestClient
 
 from rfp_copilot.api.app import create_app
+from rfp_copilot.compliance import build_compliance_rows
 from rfp_copilot.config import Settings, runs_db_url
 from rfp_copilot.db.repository import Database
-from rfp_copilot.export.docx_exporter import build_compliance_rows, export_docx
+from rfp_copilot.export.docx_exporter import export_docx
 from rfp_copilot.llm import MockLLM
-from rfp_copilot.models import Requirement, ResponseGroup, RetrievedPassage, ReviewResult
+from rfp_copilot.models import (
+    NonCompliance,
+    Requirement,
+    ResponseGroup,
+    RetrievedPassage,
+    ReviewResult,
+)
 from rfp_copilot.pipeline import PipelineService
 from rfp_copilot.retrieval.retriever import HybridRetriever
 from tests.fakes import make_pipeline_llm
@@ -32,23 +39,47 @@ DRAFT = "- **REQ-001**: certified [kb#1].\n- **REQ-002**: we train staff [kb#2].
 # -- export ----------------------------------------------------------------------------
 
 
+RETRIEVED = {"G01": {"kb#1", "kb#2", "kb#3"}}
+
+
 def test_compliance_rows() -> None:
-    reviews = {
-        "G01": ReviewResult(coverage=0.5, groundedness=1, uncovered_requirements=["REQ-002"])
-    }
+    draft = (
+        "- **REQ-001**: certified [kb#1].\n"
+        "- **REQ-002**: we train staff [kb#2]. [TO CONFIRM: number of sessions]\n"
+        "- **REQ-003**: [TO CONFIRM: bid team check: Submit a PDF.]"
+    )
     rows = {
-        r.requirement_id: r for r in build_compliance_rows(REQS, GROUPS, {"G01": DRAFT}, reviews)
+        r.requirement_id: r
+        for r in build_compliance_rows(REQS, GROUPS, {"G01": draft}, {}, RETRIEVED)
     }
-    assert rows["REQ-001"].status == "addressed"
-    assert rows["REQ-001"].sources == ["kb#1"]
+    assert (rows["REQ-001"].status, rows["REQ-001"].sources) == ("addressed", ["kb#1"])
     assert rows["REQ-001"].where_addressed == "1.1 Security"
-    assert rows["REQ-002"].status == "partially_addressed"
-    assert rows["REQ-003"].status == "not_addressed"
-    assert rows["REQ-003"].sources == []
+    assert (rows["REQ-002"].status, rows["REQ-002"].note) == ("partial", "number of sessions")
+    assert rows["REQ-003"].status == "to_confirm" and rows["REQ-003"].sources == []
+    assert rows["REQ-003"].note.startswith("Bid team check: Submit a PDF.")
+
+
+def test_non_compliance_is_flagged_with_note() -> None:
+    review = ReviewResult(
+        coverage=1,
+        groundedness=1,
+        non_compliant=[
+            NonCompliance(requirement_id="REQ-001", required="ISO 27001", offered="none")
+        ],
+    )
+    rows = build_compliance_rows(REQS, GROUPS, {"G01": DRAFT}, {"G01": review}, RETRIEVED)
+    assert rows[0].status == "non_compliant" and "ISO 27001" in rows[0].note
 
 
 def test_export_docx_content(tmp_path: Path) -> None:
-    rows = build_compliance_rows(REQS, GROUPS, {"G01": DRAFT}, {})
+    review = ReviewResult(
+        coverage=1,
+        groundedness=1,
+        non_compliant=[
+            NonCompliance(requirement_id="REQ-002", required="5 days", offered="2 days")
+        ],
+    )
+    rows = build_compliance_rows(REQS, GROUPS, {"G01": DRAFT}, {"G01": review}, RETRIEVED)
     passages = {
         "kb#1": RetrievedPassage(chunk_id="kb#1", source="kb.md", title="KB", text="t", score=1)
     }
@@ -63,13 +94,15 @@ def test_export_docx_content(tmp_path: Path) -> None:
     doc = Document(path)
     text = "\n".join(p.text for p in doc.paragraphs)
     assert "Technical Response: Test RFP" in text
+    assert "Warnings for the bid team" in text and "5 days" in text
     assert "REQ-001: certified [kb#1]." in text  # bold markers rendered, not printed
     assert "[kb#1] kb.md, KB" in text
-    assert "[kb#2] unknown source" in text
+    assert "3. Bid team checklist" in text and "☐ REQ-003" in text
     bold_runs = [r.text for p in doc.paragraphs for r in p.runs if r.bold]
     assert "REQ-001" in bold_runs
     cells = [[c.text for c in row.cells] for row in doc.tables[0].rows]
-    assert cells[1][1] == "Addressed" and cells[3][1] == "Not addressed"
+    assert cells[0] == ["Requirement", "Status", "Where addressed", "Sources", "Notes"]
+    assert [c[1] for c in cells[1:]] == ["Addressed", "NON-COMPLIANT", "To confirm"]
 
 
 # -- database --------------------------------------------------------------------------
@@ -82,10 +115,10 @@ def test_database_roundtrip(tmp_path: Path) -> None:
     run = db.update_run("r1", status="running", stage="ingest", usage={"calls": 3})
     assert (run.status, run.stage, run.usage) == ("running", "ingest", {"calls": 3})
     assert [r.id for r in db.list_runs()] == ["r2", "r1"]
-    rows = build_compliance_rows(REQS, GROUPS, {"G01": DRAFT}, {})
+    rows = build_compliance_rows(REQS, GROUPS, {"G01": DRAFT}, {}, RETRIEVED)
     db.replace_requirements("r1", REQS, rows)
     stored = db.get_requirements("r1")
-    assert [r.status for r in stored] == ["addressed", "addressed", "not_addressed"]
+    assert [r.status for r in stored] == ["addressed", "addressed", "to_confirm"]
     db.replace_requirements("r1", REQS[:1])
     assert [r.status for r in db.get_requirements("r1")] == ["pending"]
     assert db.get_run("missing") is None
@@ -130,7 +163,7 @@ def test_api_full_flow(client: TestClient, sample_pdf: Path) -> None:
     run = client.get(f"/runs/{run_id}").json()
     assert run["status"] == "completed", run["error"]
     statuses = {r["status"] for r in client.get(f"/runs/{run_id}/requirements").json()}
-    assert statuses <= {"addressed", "partially_addressed", "not_addressed"}
+    assert statuses <= {"addressed", "partial", "not_covered", "to_confirm", "non_compliant"}
     download = client.get(f"/runs/{run_id}/download")
     assert download.status_code == 200 and download.content[:2] == b"PK"
     assert [r["id"] for r in client.get("/runs").json()] == [run_id]

@@ -15,6 +15,7 @@ from rfp_copilot.models import (
     ResponseGroup,
     Section,
 )
+from rfp_copilot.textsim import near_duplicates
 
 logger = logging.getLogger(__name__)
 
@@ -87,8 +88,9 @@ def extract_requirements(
     """Extract requirements from every section of `document`, with ids REQ-001, REQ-002...
 
     The document is processed in batches small enough for a 4k-token local model. Duplicates
-    (same normalised text) are dropped. A batch whose output never validates is skipped and
-    logged rather than failing the whole run.
+    are merged, including near-duplicates such as the same requirement listed in a summary
+    table and in the main body (the more complete wording is kept). A batch whose output
+    never validates is skipped and logged rather than failing the whole run.
     """
     requirements: list[Requirement] = []
     seen: set[str] = set()
@@ -110,15 +112,25 @@ def extract_requirements(
                 continue
             seen.add(key)
             page, section_id = _locate(item, batch, document)
-            requirements.append(
-                Requirement(
-                    id=f"REQ-{len(requirements) + 1:03d}",
-                    text=item.text.strip(),
-                    type=item.type,
-                    source_page=page,
-                    section_id=section_id,
-                )
+            candidate = Requirement(
+                id=f"REQ-{len(requirements) + 1:03d}",
+                text=item.text.strip(),
+                type=item.type,
+                source_page=page,
+                section_id=section_id,
             )
+            duplicate = next(
+                (i for i, r in enumerate(requirements) if near_duplicates(r.text, candidate.text)),
+                None,
+            )
+            if duplicate is None:
+                requirements.append(candidate)
+            elif len(candidate.text) > len(requirements[duplicate].text):
+                # Keep the more complete wording (usually the main body, not a summary table)
+                # with its page and section, under the id already assigned.
+                requirements[duplicate] = candidate.model_copy(
+                    update={"id": requirements[duplicate].id}
+                )
     return requirements
 
 

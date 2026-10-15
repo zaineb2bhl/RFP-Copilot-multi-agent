@@ -70,6 +70,10 @@ class ResponseFormatUnsupportedError(LLMError):
     """The provider rejected the requested `response_format`."""
 
 
+class QuotaExhaustedError(LLMError):
+    """The provider's quota is exhausted for longer than it is worth waiting (e.g. daily)."""
+
+
 class StructuredOutputError(LLMError):
     """The model never produced output that validates against the requested schema."""
 
@@ -380,6 +384,7 @@ class BaseLLMClient(ABC):
         temperature: float | None = None,
         max_tokens: int | None = None,
         tag: str | None = None,
+        check: Callable[[T], None] | None = None,
     ) -> T:
         """Return the answer parsed and validated as `schema`.
 
@@ -387,6 +392,9 @@ class BaseLLMClient(ABC):
         back automatically if the provider rejects a format). On a validation failure the
         model is asked again, with its previous answer and the validation error, up to
         `structured_max_retries` times.
+
+        `check` adds context-dependent validation (e.g. "exactly these requirement ids"): it
+        raises ValueError with a message for the model, which triggers the same retry.
         """
         msgs = _with_schema_instruction(messages, schema)
         raw_outputs: list[str] = []
@@ -397,9 +405,14 @@ class BaseLLMClient(ABC):
             )
             raw_outputs.append(response.content)
             try:
-                return schema.model_validate_json(extract_json(response.content))
+                result = schema.model_validate_json(extract_json(response.content))
+                if check is not None:
+                    check(result)
+                return result
             except ValidationError as exc:
                 error = str(exc)
+            except ValueError as exc:
+                error = f"Invalid content: {exc}"
             errors.append(error)
             logger.warning("Structured output for %s failed validation: %s", schema.__name__, error)
             msgs = [
@@ -519,6 +532,13 @@ class RetryPolicy:
             try:
                 return fn()
             except _RETRYABLE_ERRORS as exc:
+                wait = _server_retry_delay(exc)
+                if wait is not None and wait > QUOTA_FAIL_FAST_S:
+                    # A daily quota: retrying within this run cannot succeed.
+                    raise QuotaExhaustedError(
+                        f"{label}: free-tier quota exhausted; the provider asks to retry in "
+                        f"{wait / 3600:.1f} h. Use another model or try again later."
+                    ) from exc
                 if attempt >= self.max_retries:
                     raise LLMError(
                         f"{label} call failed after {attempt + 1} attempts: {exc}"
@@ -597,6 +617,22 @@ class OpenAICompatClient(BaseLLMClient):
             )
 
         return self.retry.run(attempt, self.provider)
+
+
+QUOTA_FAIL_FAST_S = 300.0
+_RETRY_DELAY_RE = re.compile(r"retryDelay'?\"?\s*:\s*'?\"?(\d+(?:\.\d+)?)s")
+
+
+def _server_retry_delay(error: Exception) -> float | None:
+    """Seconds the provider asks to wait, from the Retry-After header or the error body.
+
+    Gemini reports daily-quota exhaustion as a 429 with `retryDelay: '31879s'` in the body.
+    """
+    header = _retry_after_seconds(error)
+    if header is not None:
+        return header
+    match = _RETRY_DELAY_RE.search(str(error))
+    return float(match.group(1)) if match else None
 
 
 def _retry_after_seconds(error: Exception | None) -> float | None:

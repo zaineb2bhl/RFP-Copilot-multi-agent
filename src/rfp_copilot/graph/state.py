@@ -20,6 +20,7 @@ class RFPState(TypedDict, total=False):
     requirements: list[dict[str, Any]]  # Requirement
     groups: list[dict[str, Any]]  # ResponseGroup
     passages: dict[str, list[dict[str, Any]]]  # group id -> RetrievedPassage list
+    evidence: dict[str, list[dict[str, Any]]]  # requirement id -> [{chunk_id, similarity}]
     drafts: dict[str, str]  # group id -> markdown
     reviews: dict[str, dict[str, Any]]  # group id -> ReviewResult
     pending_groups: list[str]  # groups written in the latest write pass

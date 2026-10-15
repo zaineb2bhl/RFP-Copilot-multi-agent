@@ -1,4 +1,4 @@
-"""Streamlit UI for RFP Copilot (talks to the FastAPI backend).
+"""RFP Copilot UI: upload an RFP, wait, download the response.
 
 Run the API first (`uvicorn rfp_copilot.api.app:app --port 8010`), then:
     streamlit run app/streamlit_app.py
@@ -8,187 +8,215 @@ Set RFP_API_URL if the API is not on http://localhost:8010.
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
 import streamlit as st
 
 API_URL = os.environ.get("RFP_API_URL", "http://localhost:8010").rstrip("/")
-ACTIVE_STATUSES = {"queued", "running"}
-STATUS_ICONS = {
-    "queued": "⏳",
-    "running": "⚙️",
-    "awaiting_review": "📝",
-    "completed": "✅",
-    "rejected": "🚫",
-    "failed": "❌",
-}
-
-st.set_page_config(page_title="RFP Copilot", page_icon="📄", layout="wide")
+ACTIVE = {"queued", "running"}
+GAPS = {"not_covered", "partial"}  # answers with a [TO CONFIRM: ...] gap
+STAGES = ["ingest", "extract_requirements", "retrieve", "write", "review", "human_review"]
 
 
-def api(method: str, path: str, **kwargs: Any) -> httpx.Response:
-    """Call the backend; show a readable error instead of a traceback."""
-    try:
-        response = httpx.request(method, f"{API_URL}{path}", timeout=60, **kwargs)
-    except httpx.HTTPError as exc:
-        st.error(f"Cannot reach the API at {API_URL}: {exc}")
-        st.stop()
-    if response.status_code >= 400:
-        st.error(f"API error {response.status_code}: {response.text}")
-        st.stop()
+# ---------------------------------------------------------------------------
+# Helpers (no Streamlit calls: unit-testable)
+# ---------------------------------------------------------------------------
+
+
+def request(method: str, path: str, **kwargs: Any) -> httpx.Response:
+    """Call the backend and raise on HTTP errors."""
+    response = httpx.request(method, f"{API_URL}{path}", timeout=120, **kwargs)
+    response.raise_for_status()
     return response
 
 
-def sidebar() -> str | None:
-    """Upload form and run list; returns the selected run id."""
-    st.sidebar.title("📄 RFP Copilot")
-    with st.sidebar.form("upload", clear_on_submit=True):
-        pdf = st.file_uploader("New RFP (PDF)", type=["pdf"])
-        if st.form_submit_button("Start analysis", type="primary") and pdf is not None:
-            run = api(
-                "POST", "/runs", files={"file": (pdf.name, pdf.getvalue(), "application/pdf")}
-            ).json()
-            st.session_state["run_id"] = run["id"]
-            st.toast(f"Run {run['id']} started")
-
-    runs = api("GET", "/runs").json()
-    if not runs:
-        st.sidebar.info("No runs yet. Upload an RFP to start.")
-        return None
-    labels = {
-        r["id"]: f"{STATUS_ICONS.get(r['status'], '')} {r['rfp_filename']} ({r['id']})"
-        for r in runs
-    }
-    ids = list(labels)
-    current = st.session_state.get("run_id")
-    index = ids.index(current) if current in ids else 0
-    selected = st.sidebar.radio("Runs", ids, index=index, format_func=labels.get)
-    st.session_state["run_id"] = selected
-    return selected
+def sections_to_complete(payload: Mapping[str, Any]) -> list[dict[str, Any]]:
+    """Sections with at least one answer the knowledge base could not (fully) provide."""
+    gaps = {r["requirement_id"] for r in payload.get("compliance", []) if r["status"] in GAPS}
+    return [g for g in payload["groups"] if gaps & set(g["requirement_ids"])]
 
 
-def show_progress(run: dict[str, Any]) -> None:
-    st.info(
-        f"{STATUS_ICONS[run['status']]} Status: **{run['status']}**, "
-        f"current step: `{run.get('stage') or 'starting'}`"
-    )
-    st.caption("Refreshing every 5 seconds while the pipeline runs.")
+def count_status(payload: Mapping[str, Any], *statuses: str) -> int:
+    """Number of requirements whose compliance status is one of `statuses`."""
+    return sum(r["status"] in statuses for r in payload.get("compliance", []))
 
 
-def show_requirements(run_id: str) -> None:
-    requirements = api("GET", f"/runs/{run_id}/requirements").json()
-    if not requirements:
-        st.write("No requirements extracted yet.")
-        return
-    columns = ["id", "type", "source_page", "status", "where_addressed", "sources", "text"]
-    rows = [{c: ", ".join(r[c]) if c == "sources" else r[c] for c in columns} for r in requirements]
-    st.dataframe(rows, hide_index=True, use_container_width=True)
-
-
-def show_review(run: dict[str, Any], payload: dict[str, Any]) -> None:
-    """Drafts with reviewer scores; editable when the run awaits review."""
-    editable = run["status"] == "awaiting_review"
-    requirements = {r["id"]: r for r in payload["requirements"]}
-    history = payload.get("review_history", [])
-    st.caption(
-        f"Write passes: {payload['iteration']}. Average score per pass: "
-        + ", ".join(f"{sum(h.values()) / len(h):.2f}" for h in history if h)
-    )
-    edits: dict[str, str] = {}
+def collect_edits(
+    run_id: str, payload: Mapping[str, Any], state: Mapping[str, Any]
+) -> dict[str, str]:
+    """Sections the user changed in the review area (group id -> new text)."""
+    edits = {}
     for group in payload["groups"]:
-        review = payload["reviews"].get(group["id"], {})
-        score = (review.get("coverage", 0) + review.get("groundedness", 0)) / 2 if review else None
-        header = f"{group['title']}  ·  score {score:.2f}" if score is not None else group["title"]
-        with st.expander(header, expanded=editable):
-            for req_id in group["requirement_ids"]:
-                req = requirements.get(req_id, {})
-                st.markdown(
-                    f"- **{req_id}** ({req.get('type')}, p.{req.get('source_page')}): "
-                    f"{req.get('text')}"
-                )
-            if review:
-                cols = st.columns(2)
-                cols[0].metric("Coverage", f"{review['coverage']:.2f}")
-                cols[1].metric("Groundedness", f"{review['groundedness']:.2f}")
-                if review.get("feedback"):
-                    st.markdown(f"**Reviewer feedback:** {review['feedback']}")
-                for claim in review.get("unsupported_claims", []):
-                    st.markdown(f"- ⚠️ {claim}")
-            draft = payload["drafts"].get(group["id"], "")
-            if editable:
-                edits[group["id"]] = st.text_area(
-                    "Draft", draft, height=300, key=f"draft-{run['id']}-{group['id']}"
-                )
-            else:
-                st.markdown(draft)
-            passages = payload["passages"].get(group["id"], [])
-            if passages:
-                st.caption(
-                    "Retrieved sources: " + ", ".join(f"[{p['chunk_id']}]" for p in passages)
-                )
-
-    if editable:
-        left, right = st.columns(2)
-        if left.button("✅ Approve and export DOCX", type="primary", use_container_width=True):
-            changed = {
-                g: t for g, t in edits.items() if t.strip() != payload["drafts"].get(g, "").strip()
-            }
-            api("POST", f"/runs/{run['id']}/review", json={"action": "approve", "edits": changed})
-            st.rerun()
-        if right.button("🚫 Reject", use_container_width=True):
-            api("POST", f"/runs/{run['id']}/review", json={"action": "reject"})
-            st.rerun()
+        text = state.get(f"edit-{run_id}-{group['id']}")
+        if text is not None and text.strip() != payload["drafts"].get(group["id"], "").strip():
+            edits[group["id"]] = text
+    return edits
 
 
-@st.fragment(run_every=5)
-def watch_progress(run_id: str) -> None:
-    """Poll while the pipeline runs; trigger a full rerun once it stops."""
-    run = api("GET", f"/runs/{run_id}").json()
-    if run["status"] in ACTIVE_STATUSES:
-        show_progress(run)
-    else:
+def fetch_document(run_id: str, status: str, edits: dict[str, str]) -> bytes:
+    """Approve the run if needed (with the user's edits), then return the DOCX bytes."""
+    if status == "awaiting_review":
+        request(
+            "POST",
+            f"/runs/{run_id}/review",
+            params={"wait": "true"},
+            json={"action": "approve", "edits": edits},
+        )
+    return request("GET", f"/runs/{run_id}/download").content
+
+
+def progress_fraction(stage: str | None) -> float:
+    """Share of the pipeline done, from the last finished stage."""
+    done = STAGES.index(stage) + 1 if stage in STAGES else 0
+    return min(0.95, 0.05 + done / len(STAGES))
+
+
+# ---------------------------------------------------------------------------
+# Screens
+# ---------------------------------------------------------------------------
+
+
+def api(method: str, path: str, **kwargs: Any) -> httpx.Response:
+    """`request` with one clear message on failure."""
+    try:
+        return request(method, path, **kwargs)
+    except httpx.HTTPError:
+        st.error("The service is not available right now. Please try again in a moment.")
+        st.stop()
+
+
+def start_screen() -> None:
+    st.markdown("<h1 style='text-align:center'>RFP Copilot</h1>", unsafe_allow_html=True)
+    st.markdown(
+        "<p style='text-align:center;color:#6b7280'>Upload an RFP. "
+        "Get a cited draft response in Word.</p>",
+        unsafe_allow_html=True,
+    )
+    pdf = st.file_uploader("RFP (PDF)", type=["pdf"], label_visibility="collapsed")
+    if st.button(
+        "Generate response", type="primary", use_container_width=True, disabled=pdf is None
+    ):
+        files = {"file": (pdf.name, pdf.getvalue(), "application/pdf")}
+        st.session_state["run_id"] = api("POST", "/runs", files=files).json()["id"]
         st.rerun()
 
 
-def show_run(run_id: str) -> None:
+@st.fragment(run_every=3)
+def waiting_screen(run_id: str) -> None:
     run = api("GET", f"/runs/{run_id}").json()
-    st.subheader(f"{run['rfp_filename']}  ·  {run['id']}")
-    if run["status"] in ACTIVE_STATUSES:
-        watch_progress(run_id)
-        return
-    if run["status"] == "failed":
-        st.error(f"Run failed: {run.get('error')}")
-    usage = run.get("usage") or {}
-    if usage:
-        cols = st.columns(4)
-        cols[0].metric("LLM calls", usage.get("calls", 0))
-        cols[1].metric("Cached calls", usage.get("cached_calls", 0))
-        cols[2].metric("Tokens", usage.get("prompt_tokens", 0) + usage.get("completion_tokens", 0))
-        cols[3].metric("Cost (USD)", f"{usage.get('cost_usd', 0):.4f}")
-    if run["status"] == "completed":
-        docx = api("GET", f"/runs/{run_id}/download")
-        st.download_button(
-            "⬇️ Download DOCX response",
-            docx.content,
-            file_name=f"{run['rfp_filename'].rsplit('.', 1)[0]}-response.docx",
-            type="primary",
-        )
-    if run["status"] == "awaiting_review":
-        st.success("Drafts are ready. Review and edit them below, then approve to export.")
-    tab_review, tab_requirements = st.tabs(["Drafts & review", "Requirements"])
-    with tab_review:
-        show_review(run, api("GET", f"/runs/{run_id}/review").json())
-    with tab_requirements:
-        show_requirements(run_id)
-
-
-selected_run = sidebar()
-if selected_run:
-    show_run(selected_run)
-else:
-    st.title("RFP Copilot")
-    st.write(
-        "Upload a public RFP (PDF) in the sidebar to extract requirements "
-        "and draft a cited response."
+    if run["status"] not in ACTIVE:
+        st.rerun()
+    st.markdown(
+        "<h3 style='text-align:center'>Generating your response…</h3>", unsafe_allow_html=True
     )
+    st.progress(progress_fraction(run.get("stage")))
+    st.caption("This usually takes a few minutes.")
+
+
+def ready_screen(run: dict[str, Any]) -> None:
+    run_id = run["id"]
+    payload = (
+        api("GET", f"/runs/{run_id}/review").json() if run["status"] == "awaiting_review" else None
+    )
+    st.markdown(
+        "<h3 style='text-align:center'>✅ Your response is ready</h3>", unsafe_allow_html=True
+    )
+
+    edits = collect_edits(run_id, payload, st.session_state) if payload else {}
+    st.download_button(
+        "Download Word document",
+        data=lambda: fetch_document(run_id, run["status"], edits),
+        file_name=f"{run['rfp_filename'].rsplit('.', 1)[0]}-response.docx",
+        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        type="primary",
+        use_container_width=True,
+    )
+
+    if payload:
+        for row in payload.get("compliance", []):
+            if row["status"] == "non_compliant":
+                st.warning(f"**{row['requirement_id']}**: {row['note']}", icon="⚠️")
+        gaps = count_status(payload, *GAPS)
+        checks = count_status(payload, "to_confirm")
+        notes = []
+        if gaps:
+            notes.append(f"{gaps} answer(s) marked [TO CONFIRM] (missing from your knowledge base)")
+        if checks:
+            notes.append(f"{checks} item(s) in the bid team checklist")
+        if notes:
+            st.caption(" · ".join(notes) + ".")
+        pending = sections_to_complete(payload)
+        if pending:
+            with st.expander("Complete before downloading"):
+                requirements = {r["id"]: r["text"] for r in payload["requirements"]}
+                for group in pending:
+                    st.markdown(f"**{group['title']}**")
+                    for rid in group["requirement_ids"]:
+                        st.caption(f"{rid}: {requirements.get(rid, '')}")
+                    draft = payload["drafts"][group["id"]]
+                    st.text_area(
+                        group["title"],
+                        draft,
+                        key=f"edit-{run_id}-{group['id']}",
+                        height=min(400, 100 + 24 * draft.count("\n")),
+                        label_visibility="collapsed",
+                    )
+
+
+def new_rfp_button() -> None:
+    st.write("")
+    if st.button("New RFP", use_container_width=True):
+        st.session_state.pop("run_id", None)
+        st.rerun()
+
+
+def history() -> None:
+    """Previous RFPs, kept out of the way in the collapsed sidebar."""
+    runs = api("GET", "/runs").json()
+    with st.sidebar:
+        st.caption("Previous RFPs")
+        for run in runs:
+            name = run["rfp_filename"].rsplit(".", 1)[0].replace("_", " ")
+            if st.button(name[:40], key=f"open-{run['id']}", use_container_width=True):
+                st.session_state["run_id"] = run["id"]
+                st.rerun()
+
+
+def main() -> None:
+    st.set_page_config(
+        page_title="RFP Copilot",
+        page_icon="📄",
+        layout="centered",
+        initial_sidebar_state="collapsed",
+        menu_items={},
+    )
+    st.markdown(
+        """
+        <style>
+          #MainMenu, footer {visibility: hidden;}
+          [data-testid="stToolbar"] {display: none;}
+          .block-container {padding-top: 12vh; max-width: 640px;}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    history()
+    run_id = st.session_state.get("run_id")
+    if not run_id:
+        start_screen()
+        return
+    run = api("GET", f"/runs/{run_id}").json()
+    if run["status"] in ACTIVE:
+        waiting_screen(run_id)
+    elif run["status"] in {"awaiting_review", "completed"}:
+        ready_screen(run)
+        new_rfp_button()
+    else:
+        st.error("This RFP could not be processed. Please try again or upload another file.")
+        new_rfp_button()
+
+
+if __name__ == "__main__":
+    main()

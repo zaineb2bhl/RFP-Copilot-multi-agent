@@ -84,6 +84,16 @@ class VectorStore:
         if ids:
             self._collection.delete(ids=list(ids))
 
+    def embeddings(self, ids: Sequence[str]) -> dict[str, list[float]]:
+        """Stored vectors for `ids` (ids not in the index are omitted)."""
+        if not ids:
+            return {}
+        result = self._collection.get(ids=list(ids), include=["embeddings"])
+        return {
+            id_: [float(x) for x in vector]
+            for id_, vector in zip(result["ids"], result["embeddings"], strict=True)
+        }
+
     def count(self) -> int:
         """Number of indexed vectors."""
         return self._collection.count()

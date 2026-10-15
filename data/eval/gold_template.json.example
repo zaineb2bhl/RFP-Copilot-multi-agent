@@ -1,0 +1,10 @@
+{
+  "rfp": "data/rfps/ballwin_mo_website_rfp.pdf",
+  "description": "City of Ballwin, MO - Website RFP. Source URL in data/rfps/SOURCES.md.",
+  "annotator": "your name",
+  "requirements": [
+    {"id": "G-001", "text": "Copy the requirement sentence from the PDF here.", "type": "mandatory", "source_page": 1},
+    {"id": "G-002", "text": "A 'should' / preferred item goes here.", "type": "desirable", "source_page": 2},
+    {"id": "G-003", "text": "A submission rule (format, deadline, forms) goes here.", "type": "administrative", "source_page": 6}
+  ]
+}

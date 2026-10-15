@@ -69,13 +69,17 @@ def fake_extract(user: str) -> str:
 
 
 def fake_write(user: str) -> str:
-    """Mention every requirement id in the prompt and cite the first passage."""
-    req_ids = list(
-        dict.fromkeys(re.findall(r"REQ-\d{3}", user.split("Knowledge-base passages")[0]))
-    )
+    """One structured answer per requirement in the prompt, citing the first passage."""
+    head = user.split("Knowledge-base passages")[0]
+    req_ids = list(dict.fromkeys(re.findall(r"^- (REQ-\d{3})", head, re.MULTILINE)))
     cites = re.findall(r"^\[([^\]]+#\d+)\]", user, re.MULTILINE)
-    cite = f" [{cites[0]}]" if cites else ""
-    return "\n".join(f"- **{rid}**: we comply, based on our experience{cite}." for rid in req_ids)
+    answers = [
+        {"requirement_id": rid, "answer": f"We comply, based on our experience [{cites[0]}]."}
+        if cites
+        else {"requirement_id": rid, "answer": "", "missing_information": "relevant evidence"}
+        for rid in req_ids
+    ]
+    return json.dumps({"answers": answers})
 
 
 class FakeReviewer:

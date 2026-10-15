@@ -43,6 +43,7 @@ def settings(tmp_path: Path) -> Settings:
         knowledge_base_dir=KB_DIR,
         chroma_dir=tmp_path / "chroma",
         runs_dir=tmp_path / "runs",
+        min_relevance=0.0,  # the 0.67 floor is calibrated for nomic-embed-text, not hash vectors
     )
 
 

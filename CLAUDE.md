@@ -14,6 +14,7 @@ review -> (deterministic loop back to write) -> human_review (interrupt) -> expo
 - Regenerate lock: `uv pip compile pyproject.toml --extra dev --extra tracing --universal -o requirements-lock.txt`
 - Index KB: `python -m rfp_copilot.cli index [--rebuild]`
 - Headless run: `python -m rfp_copilot.cli run data/rfps/sample_rfp.pdf --auto-approve`
+- Eval: `python eval/run_extraction_eval.py`, `python eval/run_rag_eval.py`, `python eval/compare_configs.py [--experiments ...] [--limit N]` (resumable; `--force` recomputes)
 - MCP server (stdio): `python -m rfp_copilot.mcp_server --project-dir .`
 - Docker: `docker compose up --build` (api + ui; Ollama stays on the host)
 - API: `python -m uvicorn rfp_copilot.api.app:app --port 8010`; UI: `python -m streamlit run app/streamlit_app.py`
@@ -23,10 +24,20 @@ review -> (deterministic loop back to write) -> human_review (interrupt) -> expo
 - `ingestion/` PDF -> sections with `[page N]` markers; requirement extraction + grouping
 - `retrieval/` chunking, embeddings (+ disk cache), Chroma store (model-name guard), BM25+, RRF, hybrid retriever
 - `graph/` state (plain dicts for the checkpointer), nodes (prompts + deterministic checks), graph wiring
-- `export/` DOCX + compliance rows; `db/` SQLAlchemy run/requirement summary; `pipeline.py` run lifecycle
+- `compliance.py` deterministic per-requirement status/sources/notes (never an LLM); `textsim.py` dedup similarity
+- `export/` DOCX (warnings, sections, matrix, checklist, sources); `db/` SQLAlchemy run/requirement summary; `pipeline.py` run lifecycle
 - `mcp_server/` FastMCP tools reusing retrieval + DB; `tracing.py` optional Langfuse (no-op without keys)
+- `evaluation/` gold models, metrics (P/R/F1, retrieval), LLM judges, resumable store, runners; `eval/*.py` are thin CLIs
+- `retrieval/rerank.py` optional listwise LLM reranker (RERANK_ENABLED)
 - `api/app.py` FastAPI (`create_app(service)` for tests); `app/streamlit_app.py` UI over the API
 - Tests use `tests/fakes.py::make_pipeline_llm` (rule-based extractor/writer/reviewer) and `HashEmbedder`.
+
+## Domain
+Municipal-website RFPs only (city/county website redesign, CMS, hosting, support). The knowledge base
+(`data/knowledge_base/`, fictional Northbridge Civic Web) must cover what those RFPs ask; do not copy
+requirements from the downloaded evaluation RFPs into it (keeps the evaluation fair).
+Hallucination guards: relevance floor (`MIN_RELEVANCE`, recalibrate with `eval/calibrate_relevance.py`),
+per-requirement retrieval budget, figure check in `graph/nodes.py::unsupported_figures`.
 
 ## Hard constraints
 - 8 GB RAM, limited disk, zero budget. NEVER add torch, transformers, sentence-transformers,

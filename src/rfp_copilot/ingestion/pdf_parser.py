@@ -132,8 +132,67 @@ def parse_pdf(path: Path | str) -> ParsedDocument:
         (s.title for s in sections if s.title != "Preamble"), path.stem
     )
     return ParsedDocument(
-        source=path.name, title=doc_title, page_texts=page_texts, sections=sections
+        source=path.name,
+        title=doc_title,
+        page_texts=page_texts,
+        sections=sections,
+        issuer=detect_issuer(page_texts[:2]),
     )
+
+
+_ENTITY = r"City|Town|Village|County|Township|Borough|Parish"
+_TITLE_CASE_RE = re.compile(
+    rf"\b({_ENTITY}) of ([A-Z][a-z][\w'.-]*(?:[ \t][A-Z][a-z][\w'.-]*){{0,2}})"
+)
+_UPPER_CASE_RE = re.compile(
+    rf"\b({_ENTITY.upper()}) OF ([A-Z][A-Z'.-]+(?:[ \t][A-Z][A-Z'.-]+){{0,3}})"
+)
+_NAME_FIRST_RE = re.compile(r"\b([A-Z][a-z]+(?:[ \t][A-Z][a-z]+)?)[ \t](County|Township|Parish)\b")
+_STOP_WORDS = {
+    "REQUEST",
+    "REQUESTS",
+    "FOR",
+    "PROPOSAL",
+    "PROPOSALS",
+    "RFP",
+    "RFQ",
+    "BID",
+    "NOTICE",
+    "INVITATION",
+    "WEBSITE",
+    "WEB",
+    "SITE",
+    "SERVICES",
+    "REDESIGN",
+    "AND",
+    "THE",
+}
+
+
+def detect_issuer(page_texts: list[str]) -> str | None:
+    """The public body that issued the RFP, e.g. "City of Ballwin", from its first pages.
+
+    Looks for "<City|Town|County...> of <Name>" (title or upper case) and "<Name> County";
+    the earliest match wins. Returns None when nothing is found (e.g. a state agency), and
+    the writer then refers to "the buyer".
+    """
+    text = "\n".join(page_texts)
+    found: list[tuple[int, str]] = []
+    if match := _TITLE_CASE_RE.search(text):
+        words = match.group(2).split()
+        while len(words) > 1 and words[-1].upper() in _STOP_WORDS:
+            words.pop()
+        found.append((match.start(), f"{match.group(1)} of {' '.join(words)}"))
+    if match := _UPPER_CASE_RE.search(text):
+        words = match.group(2).split()
+        while words and words[-1] in _STOP_WORDS:
+            words.pop()
+        if words:
+            name = " ".join(w.capitalize() for w in words)
+            found.append((match.start(), f"{match.group(1).capitalize()} of {name}"))
+    if match := _NAME_FIRST_RE.search(text):
+        found.append((match.start(), f"{match.group(2)} of {match.group(1)}"))
+    return min(found)[1] if found else None
 
 
 def split_with_page_markers(text: str, max_chars: int) -> list[str]:

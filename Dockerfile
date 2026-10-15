@@ -20,6 +20,7 @@ COPY src ./src
 RUN uv pip install --system --no-deps .
 
 COPY app ./app
+COPY .streamlit ./.streamlit
 COPY data/knowledge_base ./data/knowledge_base
 
 RUN useradd --create-home --uid 1000 app \

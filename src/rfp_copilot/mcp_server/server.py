@@ -72,7 +72,8 @@ def create_server(
         """Status of every requirement extracted for a run.
 
         Status is `pending` until the run is approved and exported, then `addressed`,
-        `partially_addressed` or `not_addressed`, with where it is addressed and its sources.
+        `partial`, `not_covered`, `to_confirm` or `non_compliant`, with where it is addressed, its
+        cited sources and a note (what is missing, what to check, or why it is non-compliant).
         """
         run = database.get_run(run_id)
         if run is None:

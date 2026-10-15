@@ -1,17 +1,14 @@
-# CV: Elena Marsh, Delivery Director and Project Manager
+# CV: Dana Whitfield, Project Manager
 
 > Synthetic data. Fictional person.
 
 ## Profile
-Elena Marsh has 16 years of experience managing digital transformation programmes, 9 of them in the public sector. She is a certified PMP (Project Management Professional) and PRINCE2 Practitioner, and a Professional Scrum Master (PSM I).
+Dana Whitfield has managed government website projects for 11 years and has led 23 municipal and county website launches at Northbridge Civic Web. She holds the PMP (Project Management Professional) certification.
 
-## Selected experience
-- Project manager, Easthaven municipal e-services portal (2023-2024): budget of 2.1 million EUR, team of 14, delivered on time.
-- Programme manager, digital services for a national tax agency (2019-2022): 5 workstreams, steering committee reporting.
-- Project manager, citizen appointment booking system for a city of 400,000 residents (2017-2018).
+## Selected projects
+- City of Larkspur Falls website redesign (2024): 17 weeks, 12 departments, launched on schedule.
+- Cedar County website and document center (2023): 22 weeks, 30 departments, 85 editors.
+- City of Millbrook website (2025): 16 weeks.
 
-## Skills
-Agile and hybrid delivery governance, risk and issue management, stakeholder management, contract and change control, benefits tracking.
-
-## Education
-MSc Information Systems Management, University of Manchester.
+## Role on projects
+Single point of contact for the city; plans and tracks the schedule, runs weekly status calls, manages risks and change requests, and coordinates content migration and training.

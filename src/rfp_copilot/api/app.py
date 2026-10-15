@@ -85,13 +85,23 @@ def create_app(service: PipelineService | None = None) -> FastAPI:
 
     @app.post("/runs/{run_id}/review", status_code=202)
     def submit_review(
-        svc: Service, background: BackgroundTasks, run_id: str, decision: ReviewDecision
+        svc: Service,
+        background: BackgroundTasks,
+        run_id: str,
+        decision: ReviewDecision,
+        wait: bool = False,
     ) -> RunRecord:
-        """Approve (optionally with edited sections) or reject a run awaiting review."""
+        """Approve (optionally with edited sections) or reject a run awaiting review.
+
+        With `wait=true` the request returns once the run has finished: after approval only
+        the DOCX export remains (no LLM call), so this takes about a second.
+        """
         run = require_run(svc, run_id)
         if run.status != "awaiting_review":
             raise HTTPException(status_code=409, detail=f"Run is {run.status}, not awaiting review")
         run = svc.db.update_run(run_id, status="running", stage="human_review")
+        if wait:
+            return svc.resume(run_id, decision)
         background.add_task(svc.resume, run_id, decision)
         return run
 

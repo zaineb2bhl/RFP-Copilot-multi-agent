@@ -22,9 +22,14 @@ build/
 dist/
 *.egg-info/
 
+# Downloaded public RFPs (re-download via data/rfps/SOURCES.md); the synthetic sample stays
+data/rfps/*.pdf
+!data/rfps/sample_rfp.pdf
+
 # Generated outputs (uploads, checkpoints, app DB, DOCX)
 runs/
 outputs/
+eval/results/items/
 eval/results/*.tmp
 
 # Editors / OS

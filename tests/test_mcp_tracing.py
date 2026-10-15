@@ -78,6 +78,7 @@ def test_mcp_server_over_stdio(tmp_path: Path) -> None:
         "CHROMA_DIR": str(tmp_path / "chroma"),
         "RUNS_DIR": str(tmp_path / "runs"),
         "LLM_CACHE_ENABLED": "false",
+        "MIN_RELEVANCE": "0",  # hash vectors: the nomic-calibrated floor does not apply
     }
     params = StdioServerParameters(
         command=sys.executable,

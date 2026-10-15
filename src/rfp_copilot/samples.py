@@ -7,81 +7,76 @@ from pathlib import Path
 
 import pymupdf
 
-SAMPLE_RFP_TITLE = "RFP-2026-014 Digital Citizen Services Portal"
+SAMPLE_RFP_TITLE = "RFP-2026-031 City Website Redesign, Hosting and Support"
 
 SAMPLE_RFP_HTML = """
-<h1>City of Riverton - Request for Proposal RFP-2026-014</h1>
-<h1>Digital Citizen Services Portal</h1>
+<h1>City of Riverton - Request for Proposal RFP-2026-031</h1>
+<h1>City Website Redesign, Hosting and Support</h1>
 <p><i>Synthetic document for demonstration purposes. The City of Riverton is fictional.</i></p>
 
 <h2>1. Introduction</h2>
-<p>The City of Riverton (population 180,000) invites qualified suppliers to submit proposals
-for the design, build, hosting and support of a Digital Citizen Services Portal. The portal
-will allow residents to request services, make payments and track their requests online.</p>
-<p>The contract will run for an initial period of three years, with an option to extend for
-two additional years.</p>
+<p>The City of Riverton (population 58,000) invites qualified firms to submit proposals for
+the redesign, hosting and ongoing support of the City's official website. The selected firm
+will deliver a modern, accessible website that residents can use easily on any device.</p>
 
 <h2>2. Background</h2>
-<p>Today, most of the City's 20 resident services are handled by telephone, email or paper
-forms. Service data is stored in a Salesforce CRM that is more than eight years old. The City
-wants to increase the share of requests submitted online and reduce processing times.</p>
+<p>The current website runs on an outdated content management system with about 1,800 pages
+and 3,000 documents. Content is managed by 40 staff members across 14 departments, most of
+whom have no technical background.</p>
 
-<h2>3. Scope of Work</h2>
-<p>The supplier shall design and deliver a responsive web portal covering at least 12
-resident services in the first release, including waste collection requests, parking
-permits and complaints.</p>
-<p>The supplier shall integrate the portal with the City's existing Salesforce CRM and its
-online payment provider through documented APIs.</p>
-<p>The supplier shall migrate open service requests and resident accounts from the legacy
-systems, with reconciliation reports approved by the City.</p>
-<p>The supplier should propose a roadmap for additional services after the first release.</p>
+<h2>3. Design and User Experience</h2>
+<p>The vendor shall conduct discovery with City staff and residents before design begins.</p>
+<p>The vendor shall provide at least two homepage design concepts that reflect the City's
+brand.</p>
+<p>The website must use a mobile-first, responsive design that works on phones, tablets and
+desktops.</p>
 
-<h2>4. Technical Requirements</h2>
-<p>The solution must be hosted in a public cloud region located in the EU or the UK.</p>
-<p>Residents must be able to create a single account and sign in securely; City staff must
-sign in with single sign-on using the City's Azure AD.</p>
-<p>The portal must conform to WCAG 2.1 level AA, confirmed by an independent audit before
-go-live.</p>
-<p>The platform must achieve at least 99.9% monthly availability.</p>
-<p>Pages should load in under 2 seconds for 95% of requests at peak load.</p>
-<p>The supplier shall provide a disaster recovery plan with a recovery time objective of no
-more than 8 hours.</p>
+<h2>4. Content Management System</h2>
+<p>The CMS must allow non-technical staff to update content without HTML knowledge.</p>
+<p>The CMS must provide role-based permissions so that each department edits only its own
+pages, with an optional approval workflow.</p>
+<p>Staff must be able to schedule content to publish and to expire at a set date and time.</p>
+<p>The CMS should allow editors to edit content directly on the front end of the site.</p>
+<p>Hidden or deleted pages must not continue to appear in search engine results.</p>
+<p>The website shall include a single community calendar that all departments can post to,
+with filtering by category.</p>
+<p>The website shall include a section to post bids and RFPs with addenda and vendor
+notifications.</p>
+<p>Staff must sign in using single sign-on with the City's Microsoft Entra ID.</p>
 
-<h2>5. Security and Data Protection</h2>
-<p>The supplier must hold a current ISO/IEC 27001 certification.</p>
-<p>All personal data must be encrypted at rest and in transit.</p>
-<p>The supplier shall support the City in completing a Data Protection Impact Assessment
-before go-live.</p>
-<p>An independent penetration test must be carried out before go-live and annually
-thereafter.</p>
-<p>The supplier must notify the City of any security incident within 24 hours.</p>
+<h2>5. Integrations</h2>
+<p>The website must provide access to the City's online utility payment portal.</p>
+<p>The website should integrate with the City's parks and recreation registration system.</p>
+<p>The vendor should provide a native mobile application for iOS and Android.</p>
 
-<h2>6. Project Management</h2>
-<p>The supplier shall use an agile delivery approach with regular demonstrations to the
-City's product owner.</p>
-<p>The supplier shall nominate a project manager holding a recognised project management
-certification such as PMP or PRINCE2.</p>
-<p>The supplier shall provide monthly progress reports and attend a monthly steering
-committee.</p>
+<h2>6. Accessibility</h2>
+<p>The website must conform to WCAG 2.1 Level AA and comply with ADA Title II requirements.</p>
+<p>The vendor shall not use accessibility overlay tools or widgets.</p>
 
-<h2>7. Training and Support</h2>
-<p>The supplier shall train City staff and administrators before go-live.</p>
-<p>The supplier must provide support during business hours with a response time of no more
-than 1 hour for critical incidents.</p>
-<p>The supplier should offer a warranty period of at least 3 months after go-live.</p>
-<p>The supplier shall provide an exit plan ensuring the transfer of code, data and
-documentation at the end of the contract.</p>
+<h2>7. Content Migration</h2>
+<p>The vendor shall migrate existing content and documents and set up redirects from old
+page addresses to preserve search rankings.</p>
 
-<h2>8. Supplier Experience and Team</h2>
-<p>Bidders must provide at least two references for similar public-sector portal projects
-delivered in the last five years.</p>
-<p>Bidders should include CVs of the key team members, including the solution architect and
-the accessibility lead.</p>
+<h2>8. Hosting and Security</h2>
+<p>The vendor must host the website with at least 99.9% uptime.</p>
+<p>The vendor must provide SSL certificates, daily backups and a disaster recovery plan.</p>
+<p>The vendor should offer an AI chatbot that answers resident questions in real time.</p>
 
-<h2>9. Submission Instructions</h2>
-<p>Proposals must be submitted as a single PDF file of no more than 30 pages, excluding CVs.</p>
-<p>The deadline for submission is 15 December 2026 at 12:00 noon local time.</p>
-<p>Pricing must be submitted in a separate file using the pricing template in Annex A.</p>
+<h2>9. Training and Support</h2>
+<p>The vendor shall provide training for administrators and content editors, with written
+documentation.</p>
+<p>The vendor must respond to critical issues within 2 hours, 24 hours a day.</p>
+<p>The vendor should provide a warranty period after launch.</p>
+
+<h2>10. Qualifications</h2>
+<p>Proposers must provide at least three references from municipal website projects completed
+in the last five years.</p>
+<p>Proposers must carry general liability and cyber liability insurance.</p>
+
+<h2>11. Submission Instructions</h2>
+<p>Proposals must be submitted as a single PDF of no more than 25 pages.</p>
+<p>The deadline for submission is 20 January 2027 at 2:00 p.m. local time.</p>
+<p>Pricing must be submitted separately using the pricing form in Attachment B.</p>
 """
 
 _CSS = """

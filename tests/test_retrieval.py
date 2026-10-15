@@ -164,10 +164,10 @@ def test_sync_index_is_incremental(tmp_path: Path) -> None:
 
 
 def test_hybrid_retriever_finds_relevant_sources(retriever: HybridRetriever) -> None:
-    results = retriever.search("ISO/IEC 27001 certification of the supplier", k=5)
+    results = retriever.search("WCAG 2.1 Level AA accessibility and ADA compliance", k=5)
     assert len(results) == 5
     assert any(
-        r.source in {"company-profile.md", "method-security-privacy.md"} for r in results[:3]
+        r.source in {"accessibility.md", "cv-accessibility-specialist.md"} for r in results[:3]
     )
     sla = retriever.search_many(["response time for critical incidents", "99.9% availability"], k=3)
-    assert sla[0].source == "method-support-sla.md"
+    assert sla[0].source in {"support-maintenance-sla.md", "hosting-security.md"}

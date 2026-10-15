@@ -78,3 +78,12 @@ def test_ollama_base_url_moves_llm_and_embeddings_but_not_gemini() -> None:
     assert resolve_embedding_profile(local).base_url == url
     remote = Settings(llm_provider="gemini", llm_api_key="k", ollama_base_url=url)
     assert "googleapis" in resolve_llm_profile(remote).base_url
+
+
+def test_eval_judge_overrides_only_the_judge() -> None:
+    settings = Settings(llm_provider="gemini", llm_api_key="k", eval_judge_model="gemini-3.8-flash")
+    assert resolve_llm_profile(settings, "reviewer").model == "gemini-3.5-flash-lite"
+    assert resolve_llm_profile(settings, "judge").model == "gemini-3.8-flash"
+    assert resolve_llm_profile(settings, "judge").api_key == "k"
+    plain = Settings(llm_provider="gemini", llm_api_key="k", reviewer_llm_model="m-rev")
+    assert resolve_llm_profile(plain, "judge").model == "m-rev"  # falls back to the reviewer

@@ -119,3 +119,28 @@ def test_client_acquires_limiter_once_per_attempt() -> None:
     fake = FakeOpenAI([status_error(openai.RateLimitError, 429), completion()])
     _client(fake, [], rate_limiter=limiter).complete(MSGS)
     assert clock.sleeps == [pytest.approx(60.0)]
+
+
+def test_daily_quota_fails_fast_without_retrying() -> None:
+    from rfp_copilot.llm import QuotaExhaustedError
+
+    body = "Quota exceeded ... 'retryDelay': '31879s'"
+    error = openai.RateLimitError(
+        body, response=status_error(openai.RateLimitError, 429).response, body=None
+    )
+    fake = FakeOpenAI([error, completion()])
+    sleeps: list[float] = []
+    with pytest.raises(QuotaExhaustedError, match="8.9 h"):
+        _client(fake, sleeps).complete(MSGS)
+    assert len(fake.requests) == 1 and sleeps == []
+
+
+def test_short_server_delay_is_still_retried() -> None:
+    body = "Rate limited, 'retryDelay': '7s'"
+    error = openai.RateLimitError(
+        body, response=status_error(openai.RateLimitError, 429).response, body=None
+    )
+    fake = FakeOpenAI([error, completion("ok")])
+    sleeps: list[float] = []
+    assert _client(fake, sleeps).complete(MSGS).content == "ok"
+    assert len(sleeps) == 1

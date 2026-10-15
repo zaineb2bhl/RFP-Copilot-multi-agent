@@ -18,13 +18,13 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
+from rfp_copilot.compliance import rows_from_state
 from rfp_copilot.config import LLMRole, Settings, runs_db_url
 from rfp_copilot.db.repository import Database, RunRecord
-from rfp_copilot.export.docx_exporter import build_compliance_rows
 from rfp_copilot.graph.graph import build_graph
 from rfp_copilot.graph.nodes import PipelineDeps
 from rfp_copilot.llm import BaseLLMClient, UsageTracker, build_llm
-from rfp_copilot.models import Requirement, ResponseGroup, ReviewResult
+from rfp_copilot.models import Requirement
 from rfp_copilot.retrieval.retriever import HybridRetriever, build_retriever
 from rfp_copilot.tracing import Tracer, get_tracer
 
@@ -156,12 +156,7 @@ class PipelineService:
         requirements = [Requirement.model_validate(r) for r in values.get("requirements", [])]
         compliance = None
         if values.get("output_path"):
-            compliance = build_compliance_rows(
-                requirements,
-                [ResponseGroup.model_validate(g) for g in values.get("groups", [])],
-                values.get("drafts", {}),
-                {k: ReviewResult.model_validate(v) for k, v in values.get("reviews", {}).items()},
-            )
+            compliance = rows_from_state(values)
         self.db.replace_requirements(run_id, requirements, compliance)
         if "human_review" in snapshot.next:
             return self.db.update_run(run_id, status="awaiting_review", stage="human_review")
@@ -180,6 +175,8 @@ class PipelineService:
         """Everything a reviewer needs: groups, drafts, reviews, requirements, passages."""
         values = self.get_snapshot(run_id).values
         return {
+            "compliance": [r.model_dump() for r in rows_from_state(values)],
+            "review_threshold": self.settings.review_threshold,
             "iteration": values.get("iteration", 0),
             "review_history": values.get("review_history", []),
             "requirements": values.get("requirements", []),

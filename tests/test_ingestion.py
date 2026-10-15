@@ -17,9 +17,9 @@ from tests.fakes import fake_extract
 
 def test_parse_sample_rfp_sections_and_pages(sample_document: ParsedDocument) -> None:
     titles = [s.title for s in sample_document.sections]
-    assert "4. Technical Requirements" in titles
-    assert "9. Submission Instructions" in titles
-    assert sample_document.title == "RFP-2026-014 Digital Citizen Services Portal"
+    assert "4. Content Management System" in titles
+    assert "11. Submission Instructions" in titles
+    assert sample_document.title == "RFP-2026-031 City Website Redesign, Hosting and Support"
     assert sample_document.page_count >= 2
     last = sample_document.sections[-1]
     assert last.page_end == sample_document.page_count
@@ -57,14 +57,16 @@ def test_extract_requirements_with_mock(sample_document: ParsedDocument) -> None
     requirements = extract_requirements(sample_document, llm, batch_chars=1500)
     assert len(requirements) >= 20
     assert [r.id for r in requirements[:2]] == ["REQ-001", "REQ-002"]
-    iso = next(r for r in requirements if "27001" in r.text)
-    assert iso.type == "mandatory"
-    assert iso.section_id == next(s.id for s in sample_document.sections if "Security" in s.title)
+    uptime = next(r for r in requirements if "99.9%" in r.text)
+    assert uptime.type == "mandatory"
+    assert uptime.section_id == next(
+        s.id for s in sample_document.sections if s.title.endswith("Hosting and Security")
+    )
     assert len(llm.calls) > 1  # batched
 
 
 def test_extraction_verifies_page_and_dedupes(sample_document: ParsedDocument) -> None:
-    deadline = "The deadline for submission is 15 December 2026 at 12:00 noon local time."
+    deadline = "The deadline for submission is 20 January 2027 at 2:00 p.m. local time."
     item = {"text": deadline, "type": "Administrative", "source_page": 1}  # wrong page
     llm = MockLLM(lambda _m: json.dumps({"requirements": [item, item]}))
     requirements = extract_requirements(sample_document, llm, batch_chars=100_000)
